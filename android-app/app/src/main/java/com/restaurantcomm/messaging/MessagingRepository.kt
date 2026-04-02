@@ -40,7 +40,7 @@ class MessagingRepository {
         transport.stop()
     }
 
-    fun sendDirect(peer: DiscoveredDevice, body: String): Message? {
+    fun sendDirect(peer: DiscoveredDevice, body: String, replyToMessageId: String? = null): Message? {
         val senderId = selfDeviceId ?: return null
         val senderRole = selfRole ?: return null
 
@@ -53,7 +53,7 @@ class MessagingRepository {
             body = body,
             timestamp = System.currentTimeMillis(),
             status = MessageStatus.SENT,
-            replyToMessageId = null
+            replyToMessageId = replyToMessageId
         )
 
         appendMessage(pending)
@@ -105,6 +105,10 @@ class MessagingRepository {
             return
         }
 
+        inbound.replyToMessageId?.let { repliedMessageId ->
+            updateMessageStatus(repliedMessageId, MessageStatus.REPLIED)
+        }
+
         val delivered = inbound.copy(status = MessageStatus.DELIVERED)
         appendMessage(delivered)
         senderHost?.let { host -> inboundSenderHostByMessageId[delivered.id] = host }
@@ -143,6 +147,28 @@ class MessagingRepository {
         )
 
         transport.send(target, ackMessage)
+    }
+
+    fun replyToMessage(messageId: String, body: String, peers: List<DiscoveredDevice>): Message? {
+        val original = _messages.value.firstOrNull { it.id == messageId } ?: return null
+        val host = inboundSenderHostByMessageId[messageId]
+        val target = peers.firstOrNull { it.deviceId == original.fromDeviceId }
+            ?: DiscoveredDevice(
+                deviceId = original.fromDeviceId,
+                role = original.fromRole,
+                host = host,
+                port = listenerPort,
+                lastSeen = System.currentTimeMillis(),
+                isOnline = host != null
+            )
+
+        if (target.host == null) return null
+        val sentReply = sendDirect(peer = target, body = body, replyToMessageId = messageId)
+        if (sentReply != null) {
+            updateMessageStatus(messageId, MessageStatus.REPLIED)
+            _inboundAlertQueue.value = _inboundAlertQueue.value.filterNot { it.id == messageId }
+        }
+        return sentReply
     }
 
     private fun appendMessage(message: Message) {

@@ -22,6 +22,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.restaurantcomm.data.RoleRepository
+import com.restaurantcomm.data.CannedMessageRepository
 import com.restaurantcomm.data.local.RoleDataStore
 import com.restaurantcomm.data.model.DeviceRole
 import com.restaurantcomm.discovery.DiscoveryManager
@@ -31,6 +32,7 @@ import com.restaurantcomm.ui.screens.HomeScreen
 import com.restaurantcomm.ui.screens.SettingsScreen
 import com.restaurantcomm.ui.screens.SetupScreen
 import com.restaurantcomm.ui.theme.RestaurantCommTheme
+import com.restaurantcomm.util.SmartReplyEngine
 import com.restaurantcomm.util.NavRoutes
 import com.restaurantcomm.viewmodel.AppUiState
 import com.restaurantcomm.viewmodel.AppViewModel
@@ -44,7 +46,15 @@ class MainActivity : ComponentActivity() {
         val repository = RoleRepository(RoleDataStore(applicationContext))
         val discoveryManager = DiscoveryManager(applicationContext)
         val messagingRepository = MessagingRepository()
-        val factory = AppViewModelFactory(repository, discoveryManager, messagingRepository)
+        val cannedMessageRepository = CannedMessageRepository()
+        val smartReplyEngine = SmartReplyEngine()
+        val factory = AppViewModelFactory(
+            repository = repository,
+            discoveryManager = discoveryManager,
+            messagingRepository = messagingRepository,
+            cannedMessageRepository = cannedMessageRepository,
+            smartReplyEngine = smartReplyEngine
+        )
 
         setContent {
             RestaurantCommTheme {
@@ -113,10 +123,12 @@ private fun RestaurantCommApp(viewModel: AppViewModel) {
                             discoveryUiState = discoveryState,
                             messagingUiState = messagingState,
                             onDraftChange = viewModel::updateMessageDraft,
+                            onCannedMessageSelected = viewModel::applyCannedMessage,
                             onSelectedPeerChange = viewModel::selectPeer,
                             onSendDirectClick = viewModel::sendDirectMessage,
                             onSendBroadcastClick = viewModel::sendBroadcastMessage,
                             onAcknowledgeActiveAlert = viewModel::acknowledgeActiveAlert,
+                            onSmartReplyClick = viewModel::sendSmartReply,
                             onSettingsClick = { navController.navigate("${NavRoutes.Settings}/${role.name}") }
                         )
                     }
