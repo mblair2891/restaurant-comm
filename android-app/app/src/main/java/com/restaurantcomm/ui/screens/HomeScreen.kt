@@ -2,6 +2,8 @@ package com.restaurantcomm.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -19,11 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.restaurantcomm.data.model.CannedMessage
 import com.restaurantcomm.data.model.DeviceRole
 import com.restaurantcomm.data.model.Message
 import com.restaurantcomm.discovery.DiscoveryStatus
@@ -33,16 +38,19 @@ import androidx.compose.ui.window.Dialog
 import java.text.DateFormat
 import java.util.Date
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     role: DeviceRole,
     discoveryUiState: DiscoveryUiState,
     messagingUiState: MessagingUiState,
     onDraftChange: (String) -> Unit,
+    onCannedMessageSelected: (CannedMessage) -> Unit,
     onSelectedPeerChange: (String?) -> Unit,
     onSendDirectClick: () -> Unit,
     onSendBroadcastClick: () -> Unit,
     onAcknowledgeActiveAlert: () -> Unit,
+    onSmartReplyClick: (String) -> Unit,
     onSettingsClick: () -> Unit
 ) {
     val selectedPeer = discoveryUiState.peers.firstOrNull { it.deviceId == messagingUiState.selectedPeerId }
@@ -103,6 +111,30 @@ fun HomeScreen(
                             Text("Role: ${peer.role.name}", fontWeight = FontWeight.SemiBold)
                             Text("Host: ${peer.host ?: "Unknown"}:${peer.port}")
                         }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("Canned messages", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        val cannedByCategory = remember(messagingUiState.cannedMessages) {
+            messagingUiState.cannedMessages.groupBy { it.category ?: "General" }
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            cannedByCategory.forEach { (category, cannedMessages) ->
+                Text(category, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    cannedMessages.forEach { cannedMessage ->
+                        AssistChip(
+                            onClick = { onCannedMessageSelected(cannedMessage) },
+                            label = { Text(cannedMessage.label) }
+                        )
                     }
                 }
             }
@@ -185,17 +217,22 @@ fun HomeScreen(
         if (activeAlert != null) {
             IncomingAlertDialog(
                 message = activeAlert,
+                smartReplies = messagingUiState.smartReplySuggestions,
                 onAcknowledgeClick = onAcknowledgeActiveAlert,
+                onSmartReplyClick = onSmartReplyClick,
                 onCloseKeyboardClick = { focusManager.clearFocus(force = true) }
             )
         }
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun IncomingAlertDialog(
     message: Message,
+    smartReplies: List<String>,
     onAcknowledgeClick: () -> Unit,
+    onSmartReplyClick: (String) -> Unit,
     onCloseKeyboardClick: () -> Unit
 ) {
     Dialog(
@@ -218,6 +255,21 @@ private fun IncomingAlertDialog(
                 Text("Incoming Message", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text("From: ${message.fromRole.name}", fontWeight = FontWeight.SemiBold)
                 Text("Message: ${message.body}")
+                if (smartReplies.isNotEmpty()) {
+                    Text("Smart replies", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        smartReplies.forEach { reply ->
+                            AssistChip(
+                                onClick = { onSmartReplyClick(reply) },
+                                label = { Text(reply) }
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = "Received: ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(Date(message.timestamp))}",
                     style = MaterialTheme.typography.bodySmall

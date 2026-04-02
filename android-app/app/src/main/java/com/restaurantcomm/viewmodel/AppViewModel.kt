@@ -3,13 +3,16 @@ package com.restaurantcomm.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.restaurantcomm.data.CannedMessageRepository
 import com.restaurantcomm.data.RoleRepository
+import com.restaurantcomm.data.model.CannedMessage
 import com.restaurantcomm.data.model.DeviceRole
 import com.restaurantcomm.data.model.Message
 import com.restaurantcomm.discovery.DiscoveredDevice
 import com.restaurantcomm.discovery.DiscoveryManager
 import com.restaurantcomm.discovery.DiscoveryStatus
 import com.restaurantcomm.messaging.MessagingRepository
+import com.restaurantcomm.util.SmartReplyEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,13 +36,17 @@ data class MessagingUiState(
     val selectedPeerId: String? = null,
     val messageDraft: String = "",
     val messages: List<Message> = emptyList(),
-    val inboundAlertQueue: List<Message> = emptyList()
+    val inboundAlertQueue: List<Message> = emptyList(),
+    val cannedMessages: List<CannedMessage> = emptyList(),
+    val smartReplySuggestions: List<String> = emptyList()
 )
 
 class AppViewModel(
     private val repository: RoleRepository,
     private val discoveryManager: DiscoveryManager,
-    private val messagingRepository: MessagingRepository
+    private val messagingRepository: MessagingRepository,
+    private val cannedMessageRepository: CannedMessageRepository,
+    private val smartReplyEngine: SmartReplyEngine
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<AppUiState>(AppUiState.Loading)
@@ -60,6 +67,9 @@ class AppViewModel(
                     _messagingUiState.value = MessagingUiState()
                     AppUiState.RoleRequired()
                 } else {
+                    _messagingUiState.value = _messagingUiState.value.copy(
+                        cannedMessages = cannedMessageRepository.getForRole(role)
+                    )
                     discoveryManager.start(role, MESSAGE_PORT)
                     messagingRepository.startListener(MESSAGE_PORT)
                     AppUiState.Ready(role)
@@ -102,7 +112,11 @@ class AppViewModel(
 
         messagingRepository.inboundAlertQueue
             .onEach { alerts ->
+                val suggestions = alerts.firstOrNull()
+                    ?.let { smartReplyEngine.suggestionsFor(it.body) }
+                    .orEmpty()
                 _messagingUiState.value = _messagingUiState.value.copy(inboundAlertQueue = alerts)
+                    .copy(smartReplySuggestions = suggestions)
             }
             .launchIn(viewModelScope)
     }
@@ -145,9 +159,22 @@ class AppViewModel(
         _messagingUiState.value = _messagingUiState.value.copy(messageDraft = "")
     }
 
+    fun applyCannedMessage(cannedMessage: CannedMessage) {
+        _messagingUiState.value = _messagingUiState.value.copy(messageDraft = cannedMessage.body)
+    }
+
     fun acknowledgeActiveAlert() {
         val activeAlert = _messagingUiState.value.inboundAlertQueue.firstOrNull() ?: return
         messagingRepository.acknowledgeMessage(activeAlert.id, _discoveryUiState.value.peers)
+    }
+
+    fun sendSmartReply(replyBody: String) {
+        val activeAlert = _messagingUiState.value.inboundAlertQueue.firstOrNull() ?: return
+        messagingRepository.replyToMessage(
+            messageId = activeAlert.id,
+            body = replyBody,
+            peers = _discoveryUiState.value.peers
+        )
     }
 
     override fun onCleared() {
@@ -164,12 +191,20 @@ class AppViewModel(
 class AppViewModelFactory(
     private val repository: RoleRepository,
     private val discoveryManager: DiscoveryManager,
-    private val messagingRepository: MessagingRepository
+    private val messagingRepository: MessagingRepository,
+    private val cannedMessageRepository: CannedMessageRepository,
+    private val smartReplyEngine: SmartReplyEngine
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AppViewModel::class.java)) {
-            return AppViewModel(repository, discoveryManager, messagingRepository) as T
+            return AppViewModel(
+                repository = repository,
+                discoveryManager = discoveryManager,
+                messagingRepository = messagingRepository,
+                cannedMessageRepository = cannedMessageRepository,
+                smartReplyEngine = smartReplyEngine
+            ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
