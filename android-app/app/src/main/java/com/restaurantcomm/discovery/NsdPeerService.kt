@@ -15,7 +15,7 @@ internal class NsdPeerService(
         fun onDiscoveryStarted()
         fun onDiscoveryFailed(errorCode: Int)
         fun onPeerFound(peer: DiscoveredDevice)
-        fun onPeerLost(serviceName: String)
+        fun onPeerLost(serviceName: String?)
     }
 
     private val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
@@ -81,7 +81,8 @@ internal class NsdPeerService(
             }
 
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                listener.onPeerLost(serviceInfo.serviceName)
+                val lostServiceName = serviceInfo.serviceName as? String
+                listener.onPeerLost(lostServiceName)
             }
         }
 
@@ -114,7 +115,7 @@ internal class NsdPeerService(
 
     private fun NsdServiceInfo.toPeerOrNull(selfDeviceId: String): DiscoveredDevice? {
         val attributes = attributes
-        val deviceId = attributes[DiscoveryConstants.TXT_KEY_DEVICE_ID]
+        val deviceId = (attributes[DiscoveryConstants.TXT_KEY_DEVICE_ID] as? ByteArray)
             ?.toString(Charsets.UTF_8)
             ?.takeIf { it.isNotBlank() }
             ?: return null
@@ -123,7 +124,7 @@ internal class NsdPeerService(
             return null
         }
 
-        val roleRaw = attributes[DiscoveryConstants.TXT_KEY_ROLE]
+        val roleRaw = (attributes[DiscoveryConstants.TXT_KEY_ROLE] as? ByteArray)
             ?.toString(Charsets.UTF_8)
             ?: return null
         val role = runCatching { DeviceRole.valueOf(roleRaw) }.getOrNull() ?: return null

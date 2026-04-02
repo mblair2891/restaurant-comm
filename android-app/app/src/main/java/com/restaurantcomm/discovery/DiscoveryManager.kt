@@ -60,8 +60,8 @@ class DiscoveryManager(context: Context) : NsdPeerService.Listener {
         _peers.value = discoveredByServiceName.values.sortedBy { it.role.name }
     }
 
-    override fun onPeerLost(serviceName: String) {
-        val normalized = serviceName.lowercase()
+    override fun onPeerLost(serviceName: String?) {
+        val normalized = serviceName?.lowercase() ?: return
         discoveredByServiceName.remove(normalized)
         _peers.value = discoveredByServiceName.values.sortedBy { it.role.name }
     }
