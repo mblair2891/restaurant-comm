@@ -1,5 +1,6 @@
 package com.restaurantcomm
 
+import android.media.RingtoneManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -8,8 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -58,6 +61,18 @@ private fun RestaurantCommApp(viewModel: AppViewModel) {
     val navController = rememberNavController()
     val discoveryState by viewModel.discoveryUiState.collectAsState()
     val messagingState by viewModel.messagingUiState.collectAsState()
+    val context = LocalContext.current
+    val activeAlertId = messagingState.inboundAlertQueue.firstOrNull()?.id
+
+    LaunchedEffect(activeAlertId) {
+        if (activeAlertId == null) return@LaunchedEffect
+        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+        uri?.let {
+            val ringtone = RingtoneManager.getRingtone(context, it)
+            ringtone?.play()
+        }
+    }
 
     TabletContainer {
         when (val state = uiState) {
@@ -101,6 +116,7 @@ private fun RestaurantCommApp(viewModel: AppViewModel) {
                             onSelectedPeerChange = viewModel::selectPeer,
                             onSendDirectClick = viewModel::sendDirectMessage,
                             onSendBroadcastClick = viewModel::sendBroadcastMessage,
+                            onAcknowledgeActiveAlert = viewModel::acknowledgeActiveAlert,
                             onSettingsClick = { navController.navigate("${NavRoutes.Settings}/${role.name}") }
                         )
                     }

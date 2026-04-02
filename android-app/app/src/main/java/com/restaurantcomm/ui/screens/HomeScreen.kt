@@ -14,17 +14,22 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DialogProperties
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.restaurantcomm.data.model.DeviceRole
+import com.restaurantcomm.data.model.Message
 import com.restaurantcomm.discovery.DiscoveryStatus
 import com.restaurantcomm.viewmodel.DiscoveryUiState
 import com.restaurantcomm.viewmodel.MessagingUiState
+import androidx.compose.ui.window.Dialog
 import java.text.DateFormat
 import java.util.Date
 
@@ -37,9 +42,12 @@ fun HomeScreen(
     onSelectedPeerChange: (String?) -> Unit,
     onSendDirectClick: () -> Unit,
     onSendBroadcastClick: () -> Unit,
+    onAcknowledgeActiveAlert: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
     val selectedPeer = discoveryUiState.peers.firstOrNull { it.deviceId == messagingUiState.selectedPeerId }
+    val focusManager = LocalFocusManager.current
+    val activeAlert = messagingUiState.inboundAlertQueue.firstOrNull()
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -148,7 +156,11 @@ fun HomeScreen(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(
-                            text = "From ${message.fromRole.name} to ${message.toRole?.name ?: "BROADCAST"}",
+                            text = if (message.fromRole == role) {
+                                "Outbound to ${message.toRole?.name ?: "BROADCAST"}"
+                            } else {
+                                "Inbound from ${message.fromRole.name}"
+                            },
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(text = message.body)
@@ -168,6 +180,61 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(12.dp))
         Button(onClick = onSettingsClick, modifier = Modifier.fillMaxWidth()) {
             Text("Settings")
+        }
+
+        if (activeAlert != null) {
+            IncomingAlertDialog(
+                message = activeAlert,
+                onAcknowledgeClick = onAcknowledgeActiveAlert,
+                onCloseKeyboardClick = { focusManager.clearFocus(force = true) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun IncomingAlertDialog(
+    message: Message,
+    onAcknowledgeClick: () -> Unit,
+    onCloseKeyboardClick: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Incoming Message", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("From: ${message.fromRole.name}", fontWeight = FontWeight.SemiBold)
+                Text("Message: ${message.body}")
+                Text(
+                    text = "Received: ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM).format(Date(message.timestamp))}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                ) {
+                    Button(onClick = onCloseKeyboardClick) {
+                        Text("Close Keyboard")
+                    }
+                    Button(onClick = onAcknowledgeClick) {
+                        Text("Acknowledge")
+                    }
+                }
+            }
         }
     }
 }
