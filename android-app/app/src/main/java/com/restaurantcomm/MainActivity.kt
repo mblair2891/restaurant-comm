@@ -12,28 +12,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavType
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import com.restaurantcomm.data.RoleRepository
 import com.restaurantcomm.data.CannedMessageRepository
+import com.restaurantcomm.data.RoleRepository
 import com.restaurantcomm.data.local.RoleDataStore
-import com.restaurantcomm.data.model.DeviceRole
 import com.restaurantcomm.discovery.DiscoveryManager
 import com.restaurantcomm.messaging.MessagingRepository
 import com.restaurantcomm.ui.components.TabletContainer
 import com.restaurantcomm.ui.screens.HomeScreen
 import com.restaurantcomm.ui.screens.SettingsScreen
-import com.restaurantcomm.ui.screens.SetupScreen
 import com.restaurantcomm.ui.theme.RestaurantCommTheme
 import com.restaurantcomm.util.SmartReplyEngine
-import com.restaurantcomm.util.NavRoutes
 import com.restaurantcomm.viewmodel.AppUiState
 import com.restaurantcomm.viewmodel.AppViewModel
 import com.restaurantcomm.viewmodel.AppViewModelFactory
@@ -68,11 +63,11 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun RestaurantCommApp(viewModel: AppViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    val navController = rememberNavController()
     val discoveryState by viewModel.discoveryUiState.collectAsState()
     val messagingState by viewModel.messagingUiState.collectAsState()
     val context = LocalContext.current
     val activeAlertId = messagingState.inboundAlertQueue.firstOrNull()?.id
+    var isSettingsOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(activeAlertId) {
         if (activeAlertId == null) return@LaunchedEffect
@@ -92,67 +87,29 @@ private fun RestaurantCommApp(viewModel: AppViewModel) {
                 }
             }
 
-            is AppUiState.RoleRequired,
             is AppUiState.Ready -> {
-                NavHost(
-                    navController = navController,
-                    startDestination = if (state is AppUiState.Ready) NavRoutes.Home else NavRoutes.Setup
-                ) {
-                    composable(NavRoutes.Setup) {
-                        SetupScreen(
-                            onRoleSelected = { selectedRole ->
-                                viewModel.saveRole(selectedRole)
-                                navController.navigate(NavRoutes.Home) {
-                                    popUpTo(NavRoutes.Setup) { inclusive = true }
-                                }
-                            }
-                        )
-                    }
-
-                    composable(NavRoutes.Home) {
-                        val role = (viewModel.uiState.value as? AppUiState.Ready)?.role
-                        if (role == null) {
-                            navController.navigate(NavRoutes.Setup) {
-                                popUpTo(NavRoutes.Home) { inclusive = true }
-                            }
-                            return@composable
-                        }
-
-                        HomeScreen(
-                            role = role,
-                            discoveryUiState = discoveryState,
-                            messagingUiState = messagingState,
-                            onDraftChange = viewModel::updateMessageDraft,
-                            onCannedMessageSelected = viewModel::applyCannedMessage,
-                            onSelectedPeerChange = viewModel::selectPeer,
-                            onSendDirectClick = viewModel::sendDirectMessage,
-                            onSendBroadcastClick = viewModel::sendBroadcastMessage,
-                            onAcknowledgeActiveAlert = viewModel::acknowledgeActiveAlert,
-                            onSmartReplyClick = viewModel::sendSmartReply,
-                            onSettingsClick = { navController.navigate("${NavRoutes.Settings}/${role.name}") }
-                        )
-                    }
-
-                    composable(
-                        route = "${NavRoutes.Settings}/{role}",
-                        arguments = listOf(navArgument("role") { type = NavType.StringType })
-                    ) { backStackEntry ->
-                        val roleName = backStackEntry.arguments?.getString("role")
-                        val role = runCatching { DeviceRole.valueOf(roleName.orEmpty()) }.getOrNull()
-                            ?: (viewModel.uiState.value as? AppUiState.Ready)?.role
-                            ?: DeviceRole.BAR
-
-                        SettingsScreen(
-                            role = role,
-                            onResetRoleClick = {
-                                viewModel.resetRole()
-                                navController.navigate(NavRoutes.Setup) {
-                                    popUpTo(0) { inclusive = true }
-                                }
-                            },
-                            onBackClick = { navController.popBackStack() }
-                        )
-                    }
+                if (isSettingsOpen) {
+                    SettingsScreen(
+                        currentRole = state.role,
+                        currentVisibilitySettings = state.visibilitySettings,
+                        onSaveClick = viewModel::saveSettings,
+                        onBackClick = { isSettingsOpen = false }
+                    )
+                } else {
+                    HomeScreen(
+                        role = state.role,
+                        discoveryUiState = discoveryState,
+                        messagingUiState = messagingState,
+                        visibilitySettings = state.visibilitySettings,
+                        onDraftChange = viewModel::updateMessageDraft,
+                        onCannedMessageSelected = viewModel::applyCannedMessage,
+                        onSelectedPeerChange = viewModel::selectPeer,
+                        onSendDirectClick = viewModel::sendDirectMessage,
+                        onSendBroadcastClick = viewModel::sendBroadcastMessage,
+                        onAcknowledgeActiveAlert = viewModel::acknowledgeActiveAlert,
+                        onSmartReplyClick = viewModel::sendSmartReply,
+                        onSettingsClick = { isSettingsOpen = true }
+                    )
                 }
             }
         }

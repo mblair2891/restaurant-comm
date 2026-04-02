@@ -8,6 +8,7 @@ import com.restaurantcomm.data.RoleRepository
 import com.restaurantcomm.data.model.CannedMessage
 import com.restaurantcomm.data.model.DeviceRole
 import com.restaurantcomm.data.model.Message
+import com.restaurantcomm.data.model.SectionVisibilitySettings
 import com.restaurantcomm.discovery.DiscoveredDevice
 import com.restaurantcomm.discovery.DiscoveryManager
 import com.restaurantcomm.discovery.DiscoveryStatus
@@ -16,14 +17,17 @@ import com.restaurantcomm.util.SmartReplyEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 sealed interface AppUiState {
     data object Loading : AppUiState
-    data class RoleRequired(val role: DeviceRole? = null) : AppUiState
-    data class Ready(val role: DeviceRole) : AppUiState
+    data class Ready(
+        val role: DeviceRole?,
+        val visibilitySettings: SectionVisibilitySettings
+    ) : AppUiState
 }
 
 data class DiscoveryUiState(
@@ -39,6 +43,11 @@ data class MessagingUiState(
     val inboundAlertQueue: List<Message> = emptyList(),
     val cannedMessages: List<CannedMessage> = emptyList(),
     val smartReplySuggestions: List<String> = emptyList()
+)
+
+data class SettingsSaveResult(
+    val success: Boolean,
+    val errorMessage: String? = null
 )
 
 class AppViewModel(
@@ -59,21 +68,25 @@ class AppViewModel(
     val messagingUiState: StateFlow<MessagingUiState> = _messagingUiState.asStateFlow()
 
     init {
-        repository.observeRole()
-            .onEach { role ->
-                _uiState.value = if (role == null) {
+        combine(
+            repository.observeRole(),
+            repository.observeVisibilitySettings()
+        ) { role, visibilitySettings ->
+            role to visibilitySettings
+        }
+            .onEach { (role, visibilitySettings) ->
+                if (role == null) {
                     discoveryManager.stop()
                     messagingRepository.stopListener()
-                    _messagingUiState.value = MessagingUiState()
-                    AppUiState.RoleRequired()
+                    _messagingUiState.value = _messagingUiState.value.copy(cannedMessages = emptyList())
                 } else {
                     _messagingUiState.value = _messagingUiState.value.copy(
                         cannedMessages = cannedMessageRepository.getForRole(role)
                     )
                     discoveryManager.start(role, MESSAGE_PORT)
                     messagingRepository.startListener(MESSAGE_PORT)
-                    AppUiState.Ready(role)
                 }
+                _uiState.value = AppUiState.Ready(role = role, visibilitySettings = visibilitySettings)
             }
             .launchIn(viewModelScope)
 
@@ -97,7 +110,7 @@ class AppViewModel(
         discoveryManager.deviceId
             .onEach { deviceId ->
                 _discoveryUiState.value = _discoveryUiState.value.copy(deviceId = deviceId)
-                val role = (_uiState.value as? AppUiState.Ready)?.role
+                val role = (uiState.value as? AppUiState.Ready)?.role
                 if (deviceId != null && role != null) {
                     messagingRepository.setSelf(deviceId, role)
                 }
@@ -121,15 +134,33 @@ class AppViewModel(
             .launchIn(viewModelScope)
     }
 
-    fun saveRole(role: DeviceRole) {
+    fun saveSettings(
+        selectedRole: DeviceRole,
+        visibilitySettings: SectionVisibilitySettings,
+        onCompleted: (SettingsSaveResult) -> Unit
+    ) {
         viewModelScope.launch {
-            repository.saveRole(role)
-        }
-    }
+            val currentRole = (uiState.value as? AppUiState.Ready)?.role
+            val currentDeviceId = _discoveryUiState.value.deviceId
+            val roleTakenByOtherPeer = currentRole != selectedRole && _discoveryUiState.value.peers.any { peer ->
+                peer.isOnline &&
+                    peer.role == selectedRole &&
+                    peer.deviceId != currentDeviceId
+            }
 
-    fun resetRole() {
-        viewModelScope.launch {
-            repository.resetRole()
+            if (roleTakenByOtherPeer) {
+                onCompleted(
+                    SettingsSaveResult(
+                        success = false,
+                        errorMessage = "Role ${selectedRole.name} is already used by another online device."
+                    )
+                )
+                return@launch
+            }
+
+            repository.saveRole(selectedRole)
+            repository.saveVisibilitySettings(visibilitySettings)
+            onCompleted(SettingsSaveResult(success = true))
         }
     }
 
