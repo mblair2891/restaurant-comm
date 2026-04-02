@@ -17,8 +17,14 @@ class MessagingRepository {
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages.asStateFlow()
 
+    private val _inboundAlertQueue = MutableStateFlow<List<Message>>(emptyList())
+    val inboundAlertQueue: StateFlow<List<Message>> = _inboundAlertQueue.asStateFlow()
+
     private var selfDeviceId: String? = null
     private var selfRole: DeviceRole? = null
+    private var listenerPort: Int = 0
+
+    private val inboundSenderHostByMessageId = mutableMapOf<String, String>()
 
     fun setSelf(deviceId: String, role: DeviceRole) {
         selfDeviceId = deviceId
@@ -26,6 +32,7 @@ class MessagingRepository {
     }
 
     fun startListener(port: Int) {
+        listenerPort = port
         transport.start(port)
     }
 
@@ -90,9 +97,52 @@ class MessagingRepository {
         return pending
     }
 
-    private suspend fun onInboundMessage(inbound: Message) {
+    private suspend fun onInboundMessage(inbound: Message, senderHost: String?) {
+        if (inbound.type == MessageType.ACKNOWLEDGEMENT) {
+            inbound.replyToMessageId?.let { messageId ->
+                updateMessageStatus(messageId, MessageStatus.ACKNOWLEDGED)
+            }
+            return
+        }
+
         val delivered = inbound.copy(status = MessageStatus.DELIVERED)
         appendMessage(delivered)
+        senderHost?.let { host -> inboundSenderHostByMessageId[delivered.id] = host }
+        _inboundAlertQueue.value = _inboundAlertQueue.value + delivered
+    }
+
+    fun acknowledgeMessage(messageId: String, peers: List<DiscoveredDevice>) {
+        val acknowledged = updateMessageStatus(messageId, MessageStatus.ACKNOWLEDGED) ?: return
+        _inboundAlertQueue.value = _inboundAlertQueue.value.filterNot { it.id == messageId }
+
+        val senderId = selfDeviceId ?: return
+        val senderRole = selfRole ?: return
+        val host = inboundSenderHostByMessageId[messageId]
+        val target = peers.firstOrNull { it.deviceId == acknowledged.fromDeviceId }
+            ?: DiscoveredDevice(
+                deviceId = acknowledged.fromDeviceId,
+                role = acknowledged.fromRole,
+                host = host,
+                port = listenerPort,
+                lastSeen = System.currentTimeMillis(),
+                isOnline = host != null
+            )
+
+        if (target.host == null) return
+
+        val ackMessage = Message(
+            id = UUID.randomUUID().toString(),
+            fromDeviceId = senderId,
+            fromRole = senderRole,
+            toRole = acknowledged.fromRole,
+            type = MessageType.ACKNOWLEDGEMENT,
+            body = "ACK",
+            timestamp = System.currentTimeMillis(),
+            status = MessageStatus.SENT,
+            replyToMessageId = acknowledged.id
+        )
+
+        transport.send(target, ackMessage)
     }
 
     private fun appendMessage(message: Message) {
@@ -103,5 +153,19 @@ class MessagingRepository {
         _messages.value = _messages.value.map { existing ->
             if (existing.id == message.id) message else existing
         }
+    }
+
+    private fun updateMessageStatus(messageId: String, status: MessageStatus): Message? {
+        var updatedMessage: Message? = null
+        _messages.value = _messages.value.map { existing ->
+            if (existing.id == messageId) {
+                val updated = existing.copy(status = status)
+                updatedMessage = updated
+                updated
+            } else {
+                existing
+            }
+        }
+        return updatedMessage
     }
 }

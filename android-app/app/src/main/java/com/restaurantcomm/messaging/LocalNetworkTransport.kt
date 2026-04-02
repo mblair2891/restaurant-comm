@@ -16,7 +16,7 @@ import java.net.Socket
 import java.net.URL
 
 class LocalNetworkTransport(
-    private val onMessageReceived: suspend (Message) -> Unit
+    private val onMessageReceived: suspend (Message, String?) -> Unit
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -105,7 +105,7 @@ class LocalNetworkTransport(
                 return
             }
 
-            onMessageReceived(message)
+            onMessageReceived(message, client.inetAddress?.hostAddress)
             writeResponse(writer, 200, "OK")
         }
     }

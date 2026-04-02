@@ -32,7 +32,8 @@ data class DiscoveryUiState(
 data class MessagingUiState(
     val selectedPeerId: String? = null,
     val messageDraft: String = "",
-    val messages: List<Message> = emptyList()
+    val messages: List<Message> = emptyList(),
+    val inboundAlertQueue: List<Message> = emptyList()
 )
 
 class AppViewModel(
@@ -98,6 +99,12 @@ class AppViewModel(
                 _messagingUiState.value = _messagingUiState.value.copy(messages = messages)
             }
             .launchIn(viewModelScope)
+
+        messagingRepository.inboundAlertQueue
+            .onEach { alerts ->
+                _messagingUiState.value = _messagingUiState.value.copy(inboundAlertQueue = alerts)
+            }
+            .launchIn(viewModelScope)
     }
 
     fun saveRole(role: DeviceRole) {
@@ -136,6 +143,11 @@ class AppViewModel(
 
         messagingRepository.sendBroadcast(_discoveryUiState.value.peers, draft)
         _messagingUiState.value = _messagingUiState.value.copy(messageDraft = "")
+    }
+
+    fun acknowledgeActiveAlert() {
+        val activeAlert = _messagingUiState.value.inboundAlertQueue.firstOrNull() ?: return
+        messagingRepository.acknowledgeMessage(activeAlert.id, _discoveryUiState.value.peers)
     }
 
     override fun onCleared() {
