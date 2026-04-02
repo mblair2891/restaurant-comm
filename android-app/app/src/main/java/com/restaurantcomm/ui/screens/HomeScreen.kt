@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import com.restaurantcomm.data.model.DeviceRole
 import com.restaurantcomm.discovery.DiscoveryStatus
 import com.restaurantcomm.viewmodel.DiscoveryUiState
+import com.restaurantcomm.viewmodel.MessagingUiState
 import java.text.DateFormat
 import java.util.Date
 
@@ -30,10 +32,14 @@ import java.util.Date
 fun HomeScreen(
     role: DeviceRole,
     discoveryUiState: DiscoveryUiState,
-    onSendMessageClick: () -> Unit,
-    onCannedMessagesClick: () -> Unit,
+    messagingUiState: MessagingUiState,
+    onDraftChange: (String) -> Unit,
+    onSelectedPeerChange: (String?) -> Unit,
+    onSendDirectClick: () -> Unit,
+    onSendBroadcastClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
+    val selectedPeer = discoveryUiState.peers.firstOrNull { it.deviceId == messagingUiState.selectedPeerId }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -72,40 +78,93 @@ fun HomeScreen(
                 style = MaterialTheme.typography.bodyMedium
             )
         } else {
-            LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+            LazyColumn(modifier = Modifier.height(140.dp)) {
                 items(discoveryUiState.peers, key = { it.deviceId }) { peer ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp),
-                        colors = CardDefaults.cardColors()
+                        colors = if (peer.deviceId == selectedPeer?.deviceId) {
+                            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                        } else {
+                            CardDefaults.cardColors()
+                        },
+                        onClick = { onSelectedPeerChange(peer.deviceId) }
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text("Role: ${peer.role.name}", fontWeight = FontWeight.SemiBold)
                             Text("Host: ${peer.host ?: "Unknown"}:${peer.port}")
-                            Text(
-                                "State: ${if (peer.isOnline) "Discovered" else "Offline"}"
-                            )
-                            Text(
-                                "Last seen: ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(peer.lastSeen))}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
                         }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(12.dp))
+        OutlinedTextField(
+            value = messagingUiState.messageDraft,
+            onValueChange = onDraftChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Message") },
+            maxLines = 3
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = onSendMessageClick, modifier = Modifier.weight(1f)) {
-                Text("Send Message")
+            Button(
+                onClick = onSendDirectClick,
+                modifier = Modifier.weight(1f),
+                enabled = selectedPeer != null && messagingUiState.messageDraft.isNotBlank()
+            ) {
+                Text("Send Direct")
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = onCannedMessagesClick, modifier = Modifier.weight(1f)) {
-                Text("Canned Messages")
+            Button(
+                onClick = onSendBroadcastClick,
+                modifier = Modifier.weight(1f),
+                enabled = messagingUiState.messageDraft.isNotBlank()
+            ) {
+                Text("Broadcast")
             }
         }
+
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Selected peer: ${selectedPeer?.role?.name ?: "None"}",
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+        Text("Messages", style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(messagingUiState.messages, key = { it.id }) { message ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "From ${message.fromRole.name} to ${message.toRole?.name ?: "BROADCAST"}",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(text = message.body)
+                        Text(
+                            text = "Type: ${message.type.name} • ${DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(message.timestamp))}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            text = "Status: ${message.status.name}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(12.dp))
         Button(onClick = onSettingsClick, modifier = Modifier.fillMaxWidth()) {
             Text("Settings")

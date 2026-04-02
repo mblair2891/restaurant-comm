@@ -4,14 +4,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -22,10 +22,9 @@ import com.restaurantcomm.data.RoleRepository
 import com.restaurantcomm.data.local.RoleDataStore
 import com.restaurantcomm.data.model.DeviceRole
 import com.restaurantcomm.discovery.DiscoveryManager
+import com.restaurantcomm.messaging.MessagingRepository
 import com.restaurantcomm.ui.components.TabletContainer
-import com.restaurantcomm.ui.screens.CannedMessagesPlaceholderScreen
 import com.restaurantcomm.ui.screens.HomeScreen
-import com.restaurantcomm.ui.screens.SendMessagePlaceholderScreen
 import com.restaurantcomm.ui.screens.SettingsScreen
 import com.restaurantcomm.ui.screens.SetupScreen
 import com.restaurantcomm.ui.theme.RestaurantCommTheme
@@ -41,7 +40,8 @@ class MainActivity : ComponentActivity() {
 
         val repository = RoleRepository(RoleDataStore(applicationContext))
         val discoveryManager = DiscoveryManager(applicationContext)
-        val factory = AppViewModelFactory(repository, discoveryManager)
+        val messagingRepository = MessagingRepository()
+        val factory = AppViewModelFactory(repository, discoveryManager, messagingRepository)
 
         setContent {
             RestaurantCommTheme {
@@ -57,6 +57,7 @@ private fun RestaurantCommApp(viewModel: AppViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val navController = rememberNavController()
     val discoveryState by viewModel.discoveryUiState.collectAsState()
+    val messagingState by viewModel.messagingUiState.collectAsState()
 
     TabletContainer {
         when (val state = uiState) {
@@ -95,18 +96,13 @@ private fun RestaurantCommApp(viewModel: AppViewModel) {
                         HomeScreen(
                             role = role,
                             discoveryUiState = discoveryState,
-                            onSendMessageClick = { navController.navigate(NavRoutes.SendMessage) },
-                            onCannedMessagesClick = { navController.navigate(NavRoutes.CannedMessages) },
+                            messagingUiState = messagingState,
+                            onDraftChange = viewModel::updateMessageDraft,
+                            onSelectedPeerChange = viewModel::selectPeer,
+                            onSendDirectClick = viewModel::sendDirectMessage,
+                            onSendBroadcastClick = viewModel::sendBroadcastMessage,
                             onSettingsClick = { navController.navigate("${NavRoutes.Settings}/${role.name}") }
                         )
-                    }
-
-                    composable(NavRoutes.SendMessage) {
-                        SendMessagePlaceholderScreen()
-                    }
-
-                    composable(NavRoutes.CannedMessages) {
-                        CannedMessagesPlaceholderScreen()
                     }
 
                     composable(
