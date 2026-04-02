@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.restaurantcomm.app-mergeDebugResources-65:/values-hdpi-v4/values-hdpi-v4.xml",
+            "map": [
+                {
+                    "source": "/home/codespace/.gradle/caches/9.2.1/transforms/c516e064bac64fdd2987bd537c3eea24/transformed/appcompat-1.6.1/res/values-hdpi-v4/values-hdpi-v4.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "6",
+                        "endColumns": "13",
+                        "endOffsets": "327"
+                    }
+                }
+            ]
+        }
+    ]
+}

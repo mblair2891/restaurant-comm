@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.restaurantcomm.app-mergeDebugResources-65:/values-ldltr-v21/values-ldltr-v21.xml",
+            "map": [
+                {
+                    "source": "/home/codespace/.gradle/caches/9.2.1/transforms/c516e064bac64fdd2987bd537c3eea24/transformed/appcompat-1.6.1/res/values-ldltr-v21/values-ldltr-v21.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "112",
+                        "endOffsets": "163"
+                    }
+                }
+            ]
+        }
+    ]
+}

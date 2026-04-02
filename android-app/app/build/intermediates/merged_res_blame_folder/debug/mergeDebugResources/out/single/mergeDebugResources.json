@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.restaurantcomm.app-debug-67:/xml_backup_rules.xml.flat",
+        "source": "com.restaurantcomm.app-main-69:/xml/backup_rules.xml"
+    },
+    {
+        "merged": "com.restaurantcomm.app-debug-67:/xml_data_extraction_rules.xml.flat",
+        "source": "com.restaurantcomm.app-main-69:/xml/data_extraction_rules.xml"
+    }
+]
