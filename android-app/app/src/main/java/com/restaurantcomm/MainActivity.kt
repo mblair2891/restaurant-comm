@@ -21,6 +21,7 @@ import androidx.navigation.navArgument
 import com.restaurantcomm.data.RoleRepository
 import com.restaurantcomm.data.local.RoleDataStore
 import com.restaurantcomm.data.model.DeviceRole
+import com.restaurantcomm.discovery.DiscoveryManager
 import com.restaurantcomm.ui.components.TabletContainer
 import com.restaurantcomm.ui.screens.CannedMessagesPlaceholderScreen
 import com.restaurantcomm.ui.screens.HomeScreen
@@ -39,7 +40,8 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val repository = RoleRepository(RoleDataStore(applicationContext))
-        val factory = AppViewModelFactory(repository)
+        val discoveryManager = DiscoveryManager(applicationContext)
+        val factory = AppViewModelFactory(repository, discoveryManager)
 
         setContent {
             RestaurantCommTheme {
@@ -54,6 +56,7 @@ class MainActivity : ComponentActivity() {
 private fun RestaurantCommApp(viewModel: AppViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val navController = rememberNavController()
+    val discoveryState by viewModel.discoveryUiState.collectAsState()
 
     TabletContainer {
         when (val state = uiState) {
@@ -91,6 +94,7 @@ private fun RestaurantCommApp(viewModel: AppViewModel) {
 
                         HomeScreen(
                             role = role,
+                            discoveryUiState = discoveryState,
                             onSendMessageClick = { navController.navigate(NavRoutes.SendMessage) },
                             onCannedMessagesClick = { navController.navigate(NavRoutes.CannedMessages) },
                             onSettingsClick = { navController.navigate("${NavRoutes.Settings}/${role.name}") }
